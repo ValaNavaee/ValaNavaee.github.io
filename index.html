@@ -369,11 +369,10 @@
     <button type="button" class="lightbox-btn lightbox-nav lightbox-prev" id="lightbox-prev" aria-label="Previous image">‹</button>
     <button type="button" class="lightbox-btn lightbox-nav lightbox-next" id="lightbox-next" aria-label="Next image">›</button>
     <figure class="lightbox-figure">
-      <div class="lightbox-stage-menu" id="lightbox-stage-menu" hidden role="tablist" aria-label="View">
-        <button type="button" class="stage-btn" id="lightbox-stage-final" role="tab" aria-selected="true">Final</button>
-        <button type="button" class="stage-btn" id="lightbox-stage-sketch" role="tab" aria-selected="false">Sketch</button>
+      <div class="lightbox-imgwrap" id="lightbox-imgwrap">
+        <img id="lightbox-img" src="" alt="">
+        <button type="button" class="stage-toggle" id="lightbox-stage-toggle" hidden></button>
       </div>
-      <img id="lightbox-img" src="" alt="">
       <figcaption id="lightbox-caption"></figcaption>
     </figure>
   </div>
@@ -411,9 +410,11 @@
     const lightboxClose = document.getElementById('lightbox-close');
     const lightboxPrev = document.getElementById('lightbox-prev');
     const lightboxNext = document.getElementById('lightbox-next');
-    const stageMenu = document.getElementById('lightbox-stage-menu');
-    const stageFinalBtn = document.getElementById('lightbox-stage-final');
-    const stageSketchBtn = document.getElementById('lightbox-stage-sketch');
+    const stageToggle = document.getElementById('lightbox-stage-toggle');
+
+    function reduceMotion() {
+      return !window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+    }
 
     function readItem(el) {
       const img = el.querySelector('img');
@@ -443,35 +444,83 @@
     let activeStage = 'final';
     let lastFocused = null;
 
-    function setStage(stage) {
-      activeStage = stage;
+    function display(stage) {
       const item = readItem(groups[activeGroup][activeIndex]);
-      const showSketch = stage === 'sketch' && item.sketchSrc;
-      lightboxImg.src = showSketch ? item.sketchSrc : item.src;
-      lightboxImg.alt = showSketch ? item.sketchAlt : item.alt;
-      lightboxCaption.textContent = item.caption + (showSketch ? ' · Sketch' : '');
-      stageFinalBtn.setAttribute('aria-selected', String(!showSketch));
-      stageSketchBtn.setAttribute('aria-selected', String(showSketch));
-      stageFinalBtn.classList.toggle('is-active', !showSketch);
-      stageSketchBtn.classList.toggle('is-active', showSketch);
+      const isSketch = stage === 'sketch' && !!item.sketchSrc;
+      return {
+        src: isSketch ? item.sketchSrc : item.src,
+        alt: isSketch ? item.sketchAlt : item.alt,
+        caption: item.caption + (isSketch ? ' · Sketch' : ''),
+        hasSketch: !!item.sketchSrc,
+        isSketch: isSketch
+      };
     }
 
-    function render() {
-      const els = groups[activeGroup];
-      const item = readItem(els[activeIndex]);
+    let isAnimating = false;
+    let paintGen = 0;
+
+    function paint(d, animate) {
+      const gen = ++paintGen;
+      const apply = () => {
+        lightboxImg.src = d.src;
+        lightboxImg.alt = d.alt;
+        lightboxCaption.textContent = d.caption;
+        lightboxImg.classList.toggle('is-swappable', d.hasSketch);
+        stageToggle.hidden = !d.hasSketch;
+        if (d.hasSketch) stageToggle.textContent = d.isSketch ? '⇄ View Final' : '⇄ View Sketch';
+      };
+      if (!animate || reduceMotion() || lightboxImg.src.endsWith(d.src)) {
+        apply();
+        lightboxImg.classList.remove('is-fading');
+        isAnimating = false;
+        return;
+      }
+      isAnimating = true;
+      lightboxImg.classList.add('is-fading');
+      let settled = false;
+      const finish = () => {
+        if (settled || gen !== paintGen) return;
+        settled = true;
+        lightboxImg.removeEventListener('transitionend', onTransitionEnd);
+        clearTimeout(fallback);
+        apply();
+        const fadeIn = () => {
+          if (gen !== paintGen) return;
+          lightboxImg.classList.remove('is-fading');
+          isAnimating = false;
+        };
+        if (lightboxImg.complete && lightboxImg.naturalWidth) fadeIn();
+        else {
+          lightboxImg.addEventListener('load', fadeIn, { once: true });
+          setTimeout(fadeIn, 400);
+        }
+      };
+      const onTransitionEnd = (e) => { if (e.propertyName === 'opacity') finish(); };
+      lightboxImg.addEventListener('transitionend', onTransitionEnd);
+      const fallback = setTimeout(finish, 260);
+    }
+
+    function render(animate) {
       activeStage = 'final';
-      stageMenu.hidden = !item.sketchSrc;
-      setStage('final');
-      const multi = els.length > 1;
+      paint(display('final'), animate);
+      const multi = groups[activeGroup].length > 1;
       lightboxPrev.hidden = !multi;
       lightboxNext.hidden = !multi;
+    }
+
+    function toggleStage() {
+      if (isAnimating) return;
+      const d = display(activeStage);
+      if (!d.hasSketch) return;
+      activeStage = activeStage === 'sketch' ? 'final' : 'sketch';
+      paint(display(activeStage), true);
     }
 
     function open(groupName, index) {
       activeGroup = groupName;
       activeIndex = index;
       lastFocused = document.activeElement;
-      render();
+      render(false);
       lightbox.hidden = false;
       document.body.style.overflow = 'hidden';
       lightboxClose.focus();
@@ -484,13 +533,14 @@
     }
 
     function step(delta) {
+      if (isAnimating) return;
       const els = groups[activeGroup];
       activeIndex = (activeIndex + delta + els.length) % els.length;
-      render();
+      render(true);
     }
 
-    stageFinalBtn.addEventListener('click', () => setStage('final'));
-    stageSketchBtn.addEventListener('click', () => setStage('sketch'));
+    stageToggle.addEventListener('click', toggleStage);
+    lightboxImg.addEventListener('click', toggleStage);
 
     Object.keys(groups).forEach((name) => {
       groups[name].forEach((el, i) => {
@@ -515,6 +565,10 @@
       if (e.key === 'Escape') close();
       if (e.key === 'ArrowLeft') step(-1);
       if (e.key === 'ArrowRight') step(1);
+      if (e.key === ' ' && lightboxImg.classList.contains('is-swappable')) {
+        e.preventDefault();
+        toggleStage();
+      }
     });
   })();
 </script>
