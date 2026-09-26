@@ -234,7 +234,7 @@ nav.links a:hover{ color:var(--accent); }
   margin:0;
   border:1px solid var(--line-strong);
   overflow:hidden;
-  aspect-ratio:1/1.02;
+  aspect-ratio:1.21/1;
 }
 .hero-plate img{ width:100%; height:100%; object-fit:cover; }
 .plate-tag{
