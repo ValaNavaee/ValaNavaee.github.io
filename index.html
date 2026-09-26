@@ -48,7 +48,7 @@
           <a class="btn btn-outline" href="https://valanavaee.artstation.com" target="_blank" rel="noopener">ArtStation ↗</a>
         </div>
       </div>
-      <div class="hero-plate reveal" data-zoom-group="hero" tabindex="0" role="button" aria-label="Expand image: Sabotage">
+      <div class="hero-plate reveal" data-zoom-group="hero" data-sketch-src="assets/img/work-sabotage-sketch.jpg" data-sketch-alt="Sabotage — an early grayscale value sketch of the same creature and couch" tabindex="0" role="button" aria-label="Expand image: Sabotage">
         <figure>
           <img src="assets/img/hero-sabotage.jpg" alt="Sabotage — a golden, tendril-crowned creature seated on an overgrown couch, lit from above" loading="eager">
         </figure>
@@ -76,7 +76,7 @@
 
       <div class="plate-grid reveal">
 
-        <button type="button" class="plate plate-rubble" data-zoom-group="work">
+        <button type="button" class="plate plate-rubble" data-zoom-group="work" data-sketch-src="assets/img/work-rubble-sketch.jpg" data-sketch-alt="Rubble — an early grayscale value sketch of the same stairwell">
           <img src="assets/img/work-rubble.jpg" alt="Rubble — a ruined stairwell interior wrapped in pale creeping growth, warm light falling through a doorway" loading="lazy">
           <div class="plate-info">
             <span class="title">Rubble</span>
@@ -84,7 +84,7 @@
           </div>
         </button>
 
-        <button type="button" class="plate plate-oozing" data-zoom-group="work">
+        <button type="button" class="plate plate-oozing" data-zoom-group="work" data-sketch-src="assets/img/work-oozing-sketch.jpg" data-sketch-alt="Oozing — an early line-work sketch of the same head">
           <img src="assets/img/work-oozing.jpg" alt="Oozing — a pale humanoid head with five weeping eye-like apertures arranged across the brow" loading="lazy">
           <div class="plate-info">
             <span class="title">Oozing</span>
@@ -92,7 +92,7 @@
           </div>
         </button>
 
-        <button type="button" class="plate plate-hope" data-zoom-group="work">
+        <button type="button" class="plate plate-hope" data-zoom-group="work" data-sketch-src="assets/img/work-hope-sketch.jpg" data-sketch-alt="Hope — an early construction sketch of the same head">
           <img src="assets/img/work-hope.jpg" alt="Hope — a bald head in profile, skin overtaken by fungal growth and pale nodules" loading="lazy">
           <div class="plate-info">
             <span class="title">Hope</span>
@@ -369,6 +369,10 @@
     <button type="button" class="lightbox-btn lightbox-nav lightbox-prev" id="lightbox-prev" aria-label="Previous image">‹</button>
     <button type="button" class="lightbox-btn lightbox-nav lightbox-next" id="lightbox-next" aria-label="Next image">›</button>
     <figure class="lightbox-figure">
+      <div class="lightbox-stage-menu" id="lightbox-stage-menu" hidden role="tablist" aria-label="View">
+        <button type="button" class="stage-btn" id="lightbox-stage-final" role="tab" aria-selected="true">Final</button>
+        <button type="button" class="stage-btn" id="lightbox-stage-sketch" role="tab" aria-selected="false">Sketch</button>
+      </div>
       <img id="lightbox-img" src="" alt="">
       <figcaption id="lightbox-caption"></figcaption>
     </figure>
@@ -407,6 +411,9 @@
     const lightboxClose = document.getElementById('lightbox-close');
     const lightboxPrev = document.getElementById('lightbox-prev');
     const lightboxNext = document.getElementById('lightbox-next');
+    const stageMenu = document.getElementById('lightbox-stage-menu');
+    const stageFinalBtn = document.getElementById('lightbox-stage-final');
+    const stageSketchBtn = document.getElementById('lightbox-stage-sketch');
 
     function readItem(el) {
       const img = el.querySelector('img');
@@ -416,7 +423,13 @@
       let caption = img.alt;
       if (titleEl && kindEl) caption = titleEl.textContent + ' — ' + kindEl.textContent;
       else if (capEl) caption = capEl.textContent;
-      return { src: img.currentSrc || img.src, alt: img.alt, caption: caption };
+      return {
+        src: img.currentSrc || img.src,
+        alt: img.alt,
+        caption: caption,
+        sketchSrc: el.dataset.sketchSrc || null,
+        sketchAlt: el.dataset.sketchAlt || null
+      };
     }
 
     const groups = {};
@@ -427,14 +440,28 @@
 
     let activeGroup = null;
     let activeIndex = 0;
+    let activeStage = 'final';
     let lastFocused = null;
+
+    function setStage(stage) {
+      activeStage = stage;
+      const item = readItem(groups[activeGroup][activeIndex]);
+      const showSketch = stage === 'sketch' && item.sketchSrc;
+      lightboxImg.src = showSketch ? item.sketchSrc : item.src;
+      lightboxImg.alt = showSketch ? item.sketchAlt : item.alt;
+      lightboxCaption.textContent = item.caption + (showSketch ? ' · Sketch' : '');
+      stageFinalBtn.setAttribute('aria-selected', String(!showSketch));
+      stageSketchBtn.setAttribute('aria-selected', String(showSketch));
+      stageFinalBtn.classList.toggle('is-active', !showSketch);
+      stageSketchBtn.classList.toggle('is-active', showSketch);
+    }
 
     function render() {
       const els = groups[activeGroup];
       const item = readItem(els[activeIndex]);
-      lightboxImg.src = item.src;
-      lightboxImg.alt = item.alt;
-      lightboxCaption.textContent = item.caption;
+      activeStage = 'final';
+      stageMenu.hidden = !item.sketchSrc;
+      setStage('final');
       const multi = els.length > 1;
       lightboxPrev.hidden = !multi;
       lightboxNext.hidden = !multi;
@@ -461,6 +488,9 @@
       activeIndex = (activeIndex + delta + els.length) % els.length;
       render();
     }
+
+    stageFinalBtn.addEventListener('click', () => setStage('final'));
+    stageSketchBtn.addEventListener('click', () => setStage('sketch'));
 
     Object.keys(groups).forEach((name) => {
       groups[name].forEach((el, i) => {
